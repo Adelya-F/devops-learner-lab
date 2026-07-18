@@ -1,0 +1,118 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#232F3E', 'primaryTextColor': '#fff', 'lineColor': '#FF9900', 'secondaryColor': '#f0f0f0'}}}%%
+
+graph TB
+    %% ===== FRONTEND LAYER =====
+    subgraph FRONTEND["☁️ FRONTEND LAYER"]
+        AMPLIFY["AWS Amplify<br/><b>devops-frontend</b><br/>SPA Dashboard<br/>(Products | Users | Orders | Real-Time)"]
+    end
+
+    %% ===== API LAYER =====
+    subgraph API_LAYER["🌐 API LAYER"]
+        HTTP_API["API Gateway HTTP API<br/><b>devops-api</b><br/>Stage: prod<br/>/users • /orders"]
+        WS_API["API Gateway WebSocket<br/><b>devops-ws-api</b><br/>Stage: prod<br/>$connect • $disconnect • $default • sendMessage"]
+    end
+
+    %% ===== COMPUTE LAYER =====
+    subgraph COMPUTE["⚡ COMPUTE LAYER (Lambda - Container Images)"]
+        USER_API["Lambda<br/><b>devops-user-api</b><br/>512MB | 30s<br/>Python 3.11"]
+        ORDER_API["Lambda<br/><b>devops-order-api</b><br/>512MB | 30s<br/>Python 3.11"]
+        NOTIF_WORKER["Lambda<br/><b>devops-notif-worker</b><br/>256MB | 60s<br/>Python 3.11"]
+        WS_LAMBDA["Lambda<br/><b>devops-websocket-api</b><br/>512MB | 30s<br/>Python 3.11"]
+    end
+
+    %% ===== DATA LAYER =====
+    subgraph DATA["💾 DATA LAYER"]
+        RDS["Amazon RDS PostgreSQL<br/><b>devops-db</b><br/>db.t3.small | Multi-AZ<br/>devopsdb (5 tables)"]
+        SQS_ORDERS["SQS<br/><b>devops-orders-queue</b>"]
+        SQS_NOTIF["SQS<br/><b>devops-notifications-queue</b>"]
+        SQS_DLQ["SQS DLQ<br/><b>devops-dlq</b><br/>maxReceiveCount: 3"]
+        SNS_NOTIF["SNS<br/><b>devops-notifications</b>"]
+        SNS_ALERTS["SNS<br/><b>devops-alerts</b>"]
+    end
+
+    %% ===== CONTAINER REGISTRY =====
+    subgraph ECR_LAYER["📦 CONTAINER REGISTRY"]
+        ECR1["ECR: devops/user-api"]
+        ECR2["ECR: devops/order-api"]
+        ECR3["ECR: devops/notif-worker"]
+        ECR4["ECR: devops/websocket-api"]
+    end
+
+    %% ===== CI/CD LAYER =====
+    subgraph CICD["🔄 CI/CD PIPELINE"]
+        GITHUB["GitHub Repository<br/><b>devops-learner-lab</b><br/>Branch Protection on main"]
+        CI_YAML["ci.yaml<br/>PR → lint + build + test"]
+        DEPLOY_YAML["deploy.yaml<br/>Push → build + ECR + Lambda + Amplify"]
+        RUNNER1["EC2 Runner 01<br/>t3.medium | Private Subnet<br/>us-west-2a"]
+        RUNNER2["EC2 Runner 02<br/>t3.medium | Private Subnet<br/>us-west-2b"]
+    end
+
+    %% ===== NETWORK LAYER =====
+    subgraph NETWORK["🔒 NETWORK LAYER"]
+        VPC["VPC: <b>devops-vpc</b><br/>210.0.0.0/16"]
+        PUB1["Public Subnet 1<br/>210.0.1.0/24 | us-west-2a"]
+        PUB2["Public Subnet 2<br/>210.0.2.0/24 | us-west-2b"]
+        PRIV1["Private Subnet 1<br/>210.0.10.0/24 | us-west-2a"]
+        PRIV2["Private Subnet 2<br/>210.0.11.0/24 | us-west-2b"]
+        IGW["Internet Gateway"]
+        NAT["NAT Gateway<br/>(Elastic IP)"]
+    end
+
+    %% ===== SECURITY & OBSERVABILITY =====
+    subgraph SECURITY["🛡️ SECURITY & OBSERVABILITY"]
+        SECRETS["Secrets Manager<br/><b>devops/rds-credentials</b>"]
+        CW_DASH["CloudWatch Dashboard<br/><b>devops-dashboard</b>"]
+        FLOW_LOGS["VPC Flow Logs<br/>/aws/vpc/devops-vpc/flowlogs"]
+        SG_RUNNERS["SG: devops-sg-runners"]
+        SG_LAMBDA["SG: devops-sg-lambda"]
+        SG_RDS["SG: devops-sg-rds<br/>Port 5432 only"]
+    end
+
+    %% ===== CONNECTIONS =====
+    AMPLIFY -->|HTTP| HTTP_API
+    AMPLIFY -->|WebSocket| WS_API
+    HTTP_API --> USER_API
+    HTTP_API --> ORDER_API
+    WS_API --> WS_LAMBDA
+
+    USER_API --> RDS
+    ORDER_API --> RDS
+    ORDER_API --> SQS_ORDERS
+    WS_LAMBDA --> RDS
+    SQS_NOTIF --> NOTIF_WORKER
+    NOTIF_WORKER --> SNS_NOTIF
+    SQS_ORDERS -.->|DLQ| SQS_DLQ
+    SQS_NOTIF -.->|DLQ| SQS_DLQ
+
+    GITHUB --> CI_YAML
+    GITHUB --> DEPLOY_YAML
+    CI_YAML --> RUNNER1
+    CI_YAML --> RUNNER2
+    DEPLOY_YAML --> RUNNER1
+    DEPLOY_YAML --> RUNNER2
+    DEPLOY_YAML -->|Push Images| ECR1
+    DEPLOY_YAML -->|Push Images| ECR2
+    DEPLOY_YAML -->|Push Images| ECR3
+    DEPLOY_YAML -->|Push Images| ECR4
+    ECR1 -.->|Image| USER_API
+    ECR2 -.->|Image| ORDER_API
+    ECR3 -.->|Image| NOTIF_WORKER
+    ECR4 -.->|Image| WS_LAMBDA
+
+    VPC --- PUB1
+    VPC --- PUB2
+    VPC --- PRIV1
+    VPC --- PRIV2
+    PUB1 --- IGW
+    PUB2 --- IGW
+    PUB1 --- NAT
+    PRIV1 -.->|Route via| NAT
+    PRIV2 -.->|Route via| NAT
+
+    SECRETS -.->|Credentials| USER_API
+    SECRETS -.->|Credentials| ORDER_API
+    SECRETS -.->|Credentials| NOTIF_WORKER
+    SECRETS -.->|Credentials| WS_LAMBDA
+    CW_DASH -.->|Monitor| USER_API
+    CW_DASH -.->|Monitor| ORDER_API
+    SNS_ALERTS -.->|Alarm| CW_DASH
