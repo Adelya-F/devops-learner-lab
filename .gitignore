@@ -1,3 +1,4 @@
+
 lambda\notification-worker\__pycache__
 lambda\order-api\__pycache__
 lambda\user-api\__pycache__
@@ -15,3 +16,5 @@ DevOps.zip
 task.md
 TechnoDev_DevOps_LKS_Modul3.docx
 TechnoDev_DevOps_LKS_Modul3.md
+arsitektur diagram.png
+architecture.mmd
