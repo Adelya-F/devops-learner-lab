@@ -5,7 +5,6 @@ lambda\user-api\__pycache__
 lambda\websocket-api\__pycache__
 .github/*
 .vscode
-.github/workflows/*
 curl_verbose.txt
 deploy.sh
 devops-frontend-deploy.zip
