@@ -3,7 +3,6 @@ lambda\notification-worker\__pycache__
 lambda\order-api\__pycache__
 lambda\user-api\__pycache__
 lambda\websocket-api\__pycache__
-.github/*
 .vscode
 curl_verbose.txt
 deploy.sh
