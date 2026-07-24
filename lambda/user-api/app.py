@@ -11,6 +11,7 @@ against RDS without needing SSH/SSM access to a runner instance.
 """
 
 import json
+import logging
 import os
 import uuid
 
@@ -18,6 +19,22 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 SCHEMA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.sql")
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+
+def get_cognito_claims(event):
+    """Extract Cognito JWT claims from API Gateway event."""
+    try:
+        claims = event["requestContext"]["authorizer"]["claims"]
+        return {
+            "sub": claims.get("sub", ""),
+            "email": claims.get("email", ""),
+            "cognito:username": claims.get("cognito:username", ""),
+        }
+    except (KeyError, TypeError):
+        return {}
 
 
 def get_db_connection():
@@ -231,6 +248,11 @@ def lambda_handler(event, context):
         finally:
             if conn:
                 conn.close()
+
+    # Extract authenticated user from Cognito
+    claims = get_cognito_claims(event)
+    if claims.get("sub"):
+        logger.info("Authenticated user: %s", claims.get("cognito:username", claims.get("sub")))
 
     http_method = (
         event.get("httpMethod")

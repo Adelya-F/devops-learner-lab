@@ -20,6 +20,19 @@ from psycopg2.extras import RealDictCursor
 SQS_CLIENT = boto3.client("sqs", region_name=os.environ.get("AWS_REGION", "us-west-2"))
 
 
+def get_cognito_claims(event):
+    """Extract Cognito claims from API Gateway authorizer context."""
+    try:
+        claims = event["requestContext"]["authorizer"]["claims"]
+        return {
+            "sub": claims.get("sub", ""),
+            "email": claims.get("email", ""),
+            "cognito:username": claims.get("cognito:username", ""),
+        }
+    except (KeyError, TypeError):
+        return {}
+
+
 def get_db_connection():
     """Create a database connection using environment variables."""
     host = os.environ.get("DB_HOST", "localhost")
@@ -426,6 +439,11 @@ def lambda_handler(event, context):
     )
     path_params = event.get("pathParameters") or {}
     query_params = event.get("queryStringParameters") or {}
+
+    # Extract authenticated user from Cognito
+    claims = get_cognito_claims(event)
+    if claims.get('sub'):
+        print(f"Authenticated user: {claims.get('cognito:username', claims.get('sub'))}")
 
     # Handle CORS preflight
     if http_method == "OPTIONS":

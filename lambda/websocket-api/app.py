@@ -19,6 +19,7 @@ Features:
   - Targeted messaging to specific users
 """
 
+import base64
 import json
 import os
 import uuid
@@ -117,9 +118,36 @@ def cleanup_dead_connections(conn, connection_ids):
         print(f"Failed to cleanup connections: {e}")
 
 
-def handle_connect(conn, connection_id, query_params):
+def validate_ws_token(event):
+    """Validate Cognito JWT token from WebSocket query parameter."""
+    try:
+        token = event.get("queryStringParameters", {}).get("token", "")
+        if not token:
+            return {}
+        parts = token.split(".")
+        if len(parts) != 3:
+            return {}
+        payload = parts[1]
+        padding = 4 - len(payload) % 4
+        if padding != 4:
+            payload += "=" * padding
+        claims = json.loads(base64.urlsafe_b64decode(payload))
+        return {
+            "sub": claims.get("sub", ""),
+            "email": claims.get("email", ""),
+            "cognito:username": claims.get("cognito:username", ""),
+        }
+    except Exception:
+        return {}
+
+
+def handle_connect(conn, connection_id, query_params, ws_claims=None):
     """Handle $connect route - store connection in database."""
-    username = query_params.get("username", "anonymous")
+    username = (
+        (ws_claims or {}).get("cognito:username")
+        or (ws_claims or {}).get("email")
+        or query_params.get("username", "anonymous")
+    )
 
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -372,7 +400,8 @@ def lambda_handler(event, context):
         conn = get_db_connection()
 
         if route_key == "$connect":
-            return handle_connect(conn, connection_id, query_params)
+            ws_claims = validate_ws_token(event)
+            return handle_connect(conn, connection_id, query_params, ws_claims=ws_claims)
 
         elif route_key == "$disconnect":
             return handle_disconnect(conn, connection_id)
