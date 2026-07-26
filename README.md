@@ -17,6 +17,7 @@ TechnoDev e-commerce platform with automated CI/CD pipeline using GitHub Actions
 | **Database** | RDS PostgreSQL Multi-AZ (db.t3.small, 20GB) — 5 tables |
 | **Messaging** | 3× SQS queues, 2× SNS topics |
 | **API** | REST API (`/users`, `/orders`, `/products`) + WebSocket API (real-time) |
+| **Auth** | Cognito User Pool (`devops-user-pool`) + SPA Client + Domain + Authorizer |
 | **Container Registry** | 4× ECR repositories |
 | **Frontend** | AWS Amplify SPA (Tailwind CSS + DaisyUI) |
 | **CI/CD** | GitHub Actions on self-hosted runners |
@@ -95,6 +96,18 @@ TechnoDev e-commerce platform with automated CI/CD pipeline using GitHub Actions
 4. Create RDS, SQS, SNS, ECR resources
 5. Push code to `main` → triggers `deploy.yaml` → builds + deploys everything
 6. Access frontend at Amplify URL, configure REST API and WebSocket URLs
+7. Cognito authentication auto-configured (User Pool, Client, Domain, Authorizer, Test User)
+
+## Cognito Configuration (Task 25)
+
+| Resource | Name | Details |
+|----------|------|---------|
+| User Pool | `devops-user-pool` | Email sign-in, password policy 8+ chars |
+| Client | `devops-spa-client` | SPA (no secret), implicit OAuth flow |
+| Domain | `devops-auth` | `{prefix}.auth.{region}.amazoncognito.com` |
+| Authorizer | `devops-cognito-authorizer` | Cognito User Pools authorizer on REST API |
+| Test User | `admin@technodev.local` | Password: `TechnoDev2026!` |
+| Secret | `devops/cognito-config` | Stores pool_id, client_id, domain |
 
 ## References
 
