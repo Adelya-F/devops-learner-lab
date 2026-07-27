@@ -11,9 +11,10 @@ on:
     branches: [main]
 
 env:
+  ACCOUNT_ID: 248837107763
   AWS_REGION: us-west-2
   PREFIX: devops
-  ECR_REGISTRY: ""  # Set dynamically in first step
+  ECR_REGISTRY: "248837107763.dkr.ecr.us-west-2.amazonaws.com/devops/notif-worker:latest"  # Set dynamically in first step
 
 jobs:
   deploy:
