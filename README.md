@@ -121,4 +121,5 @@ TechnoDev e-commerce platform with automated CI/CD pipeline using GitHub Actions
 ---
 
 *LKS Nasional 2026 · Cloud Computing*
+gitignorenya cek
 
