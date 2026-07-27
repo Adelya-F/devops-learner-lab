@@ -24,15 +24,13 @@ jobs:
       - name: Set environment variables
         run: |
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          ECR_REGISTRY="248837107763.dkr.ecr.us-west-2.amazonaws.com"
-          
           echo "ACCOUNT_ID=${ACCOUNT_ID}" >> $GITHUB_ENV
           echo "ECR_REGISTRY=${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com" >> $GITHUB_ENV
 
       - name: Login to Amazon ECR
         run: |
           aws ecr get-login-password --region ${AWS_REGION} | \
-            docker login --username AWS --password-stdin ${ECR_REGISTRY}
+          docker login --username AWS --password-stdin ${ECR_REGISTRY}
 
       # ----------------------------------------------------------------
       # Build Docker images
