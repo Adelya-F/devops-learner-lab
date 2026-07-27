@@ -11,7 +11,8 @@ TechnoDev e-commerce platform with automated CI/CD pipeline using GitHub Actions
 ## Architecture
 
 | Component | Details |
-|-----------|---------|
+
+
 | **VPC** | `devops-vpc` (210.0.0.0/16) — 2 public + 2 private subnets |
 | **Compute** | 2× EC2 t3.medium (GitHub Actions runners), 4× Lambda functions |
 | **Database** | RDS PostgreSQL Multi-AZ (db.t3.small, 20GB) — 5 tables |
@@ -120,3 +121,4 @@ TechnoDev e-commerce platform with automated CI/CD pipeline using GitHub Actions
 ---
 
 *LKS Nasional 2026 · Cloud Computing*
+
