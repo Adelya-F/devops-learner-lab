@@ -124,4 +124,4 @@ TechnoDev e-commerce platform with automated CI/CD pipeline using GitHub Actions
 
 
 sudo apt-get install -y postgresql-client
-psql -h {rds-endpoint} -U devopsadmin -d devopsdb -f sql/schema.sql
+    psql -h {rds-endpoint} -U devopsadmin -d devopsdb -f sql/schema.sql
