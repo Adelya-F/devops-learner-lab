@@ -4,7 +4,7 @@ LKS Nasional 2026 · Cloud Computing · Modul 3
 
 Handles CRUD operations for orders via API Gateway HTTP API.
 Publishes order events to SQS for downstream processing.
-Routes: ANY /orders, ANY /orders/{id}
+Routes: ANY /orders, ANY /orders/{id}, ANY /products, ANY /products/{id}
 """
 
 import json
@@ -15,13 +15,10 @@ import boto3
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-
-# Module-level SQS client for Lambda connection reuse
 SQS_CLIENT = boto3.client("sqs", region_name=os.environ.get("AWS_REGION", "us-west-2"))
 
 
 def get_cognito_claims(event):
-    """Extract Cognito claims from API Gateway authorizer context."""
     try:
         claims = event["requestContext"]["authorizer"]["claims"]
         return {
@@ -34,7 +31,6 @@ def get_cognito_claims(event):
 
 
 def get_db_connection():
-    """Create a database connection using environment variables."""
     host = os.environ.get("DB_HOST", "localhost")
     port = os.environ.get("DB_PORT", "5432")
     dbname = os.environ.get("DB_NAME", "devopsdb")
@@ -54,7 +50,6 @@ def get_db_connection():
 
 
 def get_queue_url(queue_name):
-    """Resolve SQS queue URL by name."""
     try:
         resp = SQS_CLIENT.get_queue_url(QueueName=queue_name)
         return resp["QueueUrl"]
@@ -63,7 +58,6 @@ def get_queue_url(queue_name):
 
 
 def publish_to_sqs(queue_url, message_body, message_attributes=None):
-    """Publish a message to SQS queue."""
     if queue_url is None:
         return
     params = {
@@ -76,7 +70,6 @@ def publish_to_sqs(queue_url, message_body, message_attributes=None):
 
 
 def response(status_code, body):
-    """Build API Gateway HTTP API response."""
     return {
         "statusCode": status_code,
         "headers": {
@@ -90,7 +83,6 @@ def response(status_code, body):
 
 
 def parse_body(event):
-    """Parse request body from API Gateway event."""
     body = event.get("body")
     if body is None:
         return {}
@@ -100,7 +92,6 @@ def parse_body(event):
 
 
 def list_orders(conn, query_params):
-    """GET /orders - List all orders with optional filtering."""
     limit = int(query_params.get("limit", 50))
     offset = int(query_params.get("offset", 0))
     user_id = query_params.get("user_id")
@@ -133,7 +124,7 @@ def list_orders(conn, query_params):
     base_query += " ORDER BY o.created_at DESC LIMIT %s OFFSET %s"
     params.extend([limit, offset])
 
-    count_params = list(params[:-2])  # exclude limit/offset
+    count_params = list(params[:-2])
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(base_query, params)
@@ -146,7 +137,6 @@ def list_orders(conn, query_params):
 
 
 def list_products(conn, query_params):
-    """GET /products - List product catalog with optional pagination."""
     limit = int(query_params.get("limit", 50))
     offset = int(query_params.get("offset", 0))
 
@@ -166,7 +156,6 @@ def list_products(conn, query_params):
 
 
 def get_product(conn, product_id):
-    """GET /products/{id} - Get a single product by ID."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             "SELECT id, sku, name, description, price, stock, category, "
@@ -182,7 +171,6 @@ def get_product(conn, product_id):
 
 
 def get_order(conn, order_id):
-    """GET /orders/{id} - Get a single order by ID."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             "SELECT o.id, o.user_id, o.product_id, o.quantity, o.total_price, "
@@ -203,7 +191,6 @@ def get_order(conn, order_id):
 
 
 def create_order(conn, body):
-    """POST /orders - Create a new order and publish to SQS."""
     required_fields = ["user_id", "product_id", "quantity"]
     for field in required_fields:
         if field not in body:
@@ -219,14 +206,12 @@ def create_order(conn, body):
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         try:
-            # Verify user exists
             cur.execute("SELECT id, username, email FROM users WHERE id = %s", (user_id,))
             user = cur.fetchone()
             if user is None:
                 conn.rollback()
                 return response(404, {"error": "User not found", "user_id": user_id})
 
-            # Get product details and check stock (with row lock)
             cur.execute(
                 "SELECT id, name, sku, price, stock FROM products WHERE id = %s FOR UPDATE",
                 (product_id,),
@@ -249,7 +234,6 @@ def create_order(conn, body):
 
             total_price = float(product["price"]) * quantity
 
-            # Create order
             cur.execute(
                 "INSERT INTO orders (id, user_id, product_id, quantity, total_price, "
                 "status, shipping_address, notes) "
@@ -268,13 +252,11 @@ def create_order(conn, body):
             )
             order = cur.fetchone()
 
-            # Decrease product stock
             cur.execute(
                 "UPDATE products SET stock = stock - %s, updated_at = NOW() WHERE id = %s",
                 (quantity, product_id),
             )
 
-            # Create notification record in DB
             notif_id = str(uuid.uuid4())
             cur.execute(
                 "INSERT INTO notifications (id, user_id, order_id, type, message, channel, status) "
@@ -296,7 +278,6 @@ def create_order(conn, body):
             conn.rollback()
             return response(500, {"error": "Failed to create order", "detail": str(e)})
 
-    # Publish to SQS after successful commit (best-effort)
     try:
         orders_queue_url = get_queue_url(os.environ.get("ORDERS_QUEUE", "devops-orders-queue"))
         if orders_queue_url:
@@ -320,7 +301,6 @@ def create_order(conn, body):
                 },
             )
 
-        # Also publish to notifications queue for notification-worker
         notif_queue_url = get_queue_url(os.environ.get("NOTIFICATIONS_QUEUE", "devops-notifications-queue"))
         if notif_queue_url:
             publish_to_sqs(
@@ -337,14 +317,12 @@ def create_order(conn, body):
                 },
             )
     except Exception as sqs_err:
-        # SQS publish is best-effort; order already committed to DB
         print(f"SQS publish warning: {sqs_err}")
 
     return response(201, {"message": "Order created successfully", "order": order})
 
 
 def update_order_status(conn, order_id, body):
-    """PUT /orders/{id} - Update order status using stored procedure."""
     new_status = body.get("status")
     if not new_status:
         return response(400, {"error": "Missing required field: status"})
@@ -368,7 +346,6 @@ def update_order_status(conn, order_id, body):
     if order is None:
         return response(404, {"error": "Order not found", "order_id": order_id})
 
-    # Publish status update notification
     try:
         notif_queue_url = get_queue_url(os.environ.get("NOTIFICATIONS_QUEUE", "devops-notifications-queue"))
         if notif_queue_url:
@@ -389,7 +366,6 @@ def update_order_status(conn, order_id, body):
 
 
 def delete_order(conn, order_id):
-    """DELETE /orders/{id} - Cancel/delete an order (restores stock)."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         try:
             cur.execute(
@@ -410,7 +386,6 @@ def delete_order(conn, order_id):
                     },
                 )
 
-            # Restore stock
             cur.execute(
                 "UPDATE products SET stock = stock + %s, updated_at = NOW() WHERE id = %s",
                 (order["quantity"], order["product_id"]),
@@ -428,7 +403,6 @@ def delete_order(conn, order_id):
 
 
 def lambda_handler(event, context):
-    """Main Lambda handler for Order API. Also serves the read-only Products catalog."""
     http_method = (
         event.get("httpMethod")
         or event.get("requestContext", {}).get("http", {}).get("method", "GET")
@@ -440,44 +414,40 @@ def lambda_handler(event, context):
     path_params = event.get("pathParameters") or {}
     query_params = event.get("queryStringParameters") or {}
 
-    # Extract authenticated user from Cognito
     claims = get_cognito_claims(event)
-    if claims.get('sub'):
+    if claims.get("sub"):
         print(f"Authenticated user: {claims.get('cognito:username', claims.get('sub'))}")
 
-    # Handle CORS preflight
     if http_method == "OPTIONS":
         return response(200, {"message": "OK"})
 
     is_products_route = path.startswith("/products")
+    item_id = path_params.get("id") or path_params.get("proxy")
 
     conn = None
     try:
         conn = get_db_connection()
 
         if is_products_route:
-            product_id = path_params.get("id")
-            if http_method == "GET" and product_id is None:
+            if http_method == "GET" and item_id is None:
                 return list_products(conn, query_params)
-            elif http_method == "GET" and product_id:
-                return get_product(conn, product_id)
+            elif http_method == "GET" and item_id:
+                return get_product(conn, item_id)
             else:
                 return response(405, {"error": f"Method {http_method} not allowed on {path}"})
 
-        order_id = path_params.get("id")
-
-        if http_method == "GET" and order_id is None:
+        if http_method == "GET" and item_id is None:
             return list_orders(conn, query_params)
-        elif http_method == "GET" and order_id:
-            return get_order(conn, order_id)
+        elif http_method == "GET" and item_id:
+            return get_order(conn, item_id)
         elif http_method == "POST":
             body = parse_body(event)
             return create_order(conn, body)
-        elif http_method == "PUT" and order_id:
+        elif http_method == "PUT" and item_id:
             body = parse_body(event)
-            return update_order_status(conn, order_id, body)
-        elif http_method == "DELETE" and order_id:
-            return delete_order(conn, order_id)
+            return update_order_status(conn, item_id, body)
+        elif http_method == "DELETE" and item_id:
+            return delete_order(conn, item_id)
         else:
             return response(405, {"error": f"Method {http_method} not allowed"})
 
